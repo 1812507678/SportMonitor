@@ -13,6 +13,7 @@ public class OnlineUser {
 	private int webSocketIndex; 
 	private int heartRate; 
 	private int kcal; 
+	private String state;
 
     public String getIconUrl() {
         return iconUrl;
@@ -96,13 +97,24 @@ public class OnlineUser {
 		this.kcal = kcal;
 	}
 
+	
+
+
+	public String getState() {
+		return state;
+	}
+
+	public void setState(String state) {
+		this.state = state;
+	}
+
 	@Override
 	public String toString() {
 		return "OnlineUser [iconUrl=" + iconUrl + ", username=" + username
 				+ ", onlinestate=" + onlinestate + ", province=" + province
 				+ ", sex=" + sex + ", age=" + age + ", webSocketIndex="
 				+ webSocketIndex + ", heartRate=" + heartRate + ", kcal="
-				+ kcal + "]";
+				+ kcal + ", state=" + state + "]";
 	}
 
 	public OnlineUser(String iconUrl, String username, int onlinestate,

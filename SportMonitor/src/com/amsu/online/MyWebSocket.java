@@ -3,6 +3,8 @@ package com.amsu.online;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
@@ -23,6 +25,7 @@ import javax.websocket.Session;
 import javax.websocket.server.ServerEndpoint;
 
 import com.amsu.online.bean.OnlineUser;
+import com.amsu.online.bean.ScoreInfo;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
  
@@ -48,6 +51,7 @@ public class MyWebSocket {
     //private static List<OnlineUser> onlineAppUserList = new ArrayList<OnlineUser>();  
     
     private static Map<Integer,OnlineUser> onlineAppUserList = new HashMap<Integer,OnlineUser>(); 
+    private static List<ScoreInfo> scoreInfos = new ArrayList<ScoreInfo>();
     
     
     private static int startCountIndex = 0;
@@ -83,6 +87,11 @@ public class MyWebSocket {
         
 		sendMessage(json);
 		
+		if (scoreInfos.size()>0) {
+			getAllRankList(scoreInfos);
+			String scoreInfosString = "F4,"+gson.toJson(scoreInfos);
+	    	sendMessage(scoreInfosString);
+		}
     }
     
     /**
@@ -110,7 +119,7 @@ public class MyWebSocket {
         webSocketSet.remove(this);  //从set中删除
         browserWebSocketSet.remove(this);  //从set中删除
         
-      //给网页发消息
+        //给网页发消息
 		Collection<OnlineUser> valueCollection = onlineAppUserList.values();
 		List<OnlineUser> tempOnlineUser = new ArrayList<OnlineUser>(valueCollection);
         String json = "F3,"+gson.toJson(tempOnlineUser);
@@ -156,7 +165,7 @@ public class MyWebSocket {
         }
         else if(message.startsWith("A2")){
         	//app在线
-        	System.out.println("app在线成功" );
+        	System.out.println("app在线成功，ready" );
         	
         	//int webSocketIndex = onlineAppUserList.size();
         	startCountIndex++;
@@ -173,6 +182,7 @@ public class MyWebSocket {
         	if (split!=null && split.length>=7) {
         		OnlineUser onlineUser = new OnlineUser(split[1], split[3], Integer.parseInt(split[2]),split[4],split[5],split[6]);
         		onlineUser.setWebSocketIndex(webSocketIndex);
+        		onlineUser.setState("ready");
         		onlineAppUserList.put(webSocketIndex,onlineUser);
         		String toAppClientMsg = "F2,"+webSocketIndex;  //给app返回当前app所在列表索引
         		this.sendMessage(toAppClientMsg);
@@ -224,6 +234,46 @@ public class MyWebSocket {
         	}
         	
         }
+        else if(message.startsWith("A5")){
+        	//app已经开始跑步，跑步中ing
+        	//A5,1   (1为app端的id，即为用户列表的索引)
+        	String[] split = message.split(",");
+        	if (split!=null && split.length==2) {
+        		int parseInt = Integer.parseInt(split[1]);
+        		OnlineUser onlineUser = onlineAppUserList.get(parseInt);
+        		if (onlineUser!=null) {
+					onlineUser.setState("跑步中");
+					onlineAppUserList.put(parseInt, onlineUser);
+					
+					//通知所有浏览器更新用户状态
+					Collection<OnlineUser> valueCollection = onlineAppUserList.values();
+					List<OnlineUser> tempOnlineUser = new ArrayList<OnlineUser>(valueCollection);
+			        String json = "F3,"+gson.toJson(tempOnlineUser);
+					for(MyWebSocket webSocket:browserWebSocketSet){
+		        		if (webSocket!=null) {
+		    				webSocket.sendMessage(json);
+						}
+		        	}
+				}
+        		
+        	}
+        }
+        else if(message.startsWith("A6")){
+        	//app结束跑步，上传最后结果
+            //A6,{"iconUrl":"url","username":"天空之城","province":"深圳","sex":"男","age":25,"prematureCount":2,"missCount":3,"overScore":3,"averageHeart":100,"averageHeartScore":4,"maxHeart":121,"maxHeartScore":4,"kcal":45,"kcalScore":2,"allscore":23,"rank":2}
+        	String substring = message.substring(3);
+        	ScoreInfo scoreInfo = gson.fromJson(substring, ScoreInfo.class);
+        	scoreInfos.add(scoreInfo);
+        	
+        	getAllRankList(scoreInfos);
+        	String json = "F4,"+gson.toJson(scoreInfos);
+        	for(MyWebSocket webSocket:browserWebSocketSet){
+        		if (webSocket!=null) {
+    				webSocket.sendMessage(json);
+				}
+        	}
+        }
+        
         else if(message.startsWith("W1")){
         	//网页在线
         	System.out.println("网页端在线成功");
@@ -265,7 +315,17 @@ public class MyWebSocket {
         		
 			}
         }
-        
+        else if(message.startsWith("W5")){
+        	//网页端请求指定app数据
+        	System.out.println("点击开始，服务器需要清空分析结果用户列表");
+        	
+        	//给app发送指令，切换app数据
+        	String[] split = message.split(",");
+        	if (split.length==2) {
+        		scoreInfos.clear();
+        		onlineAppUserList.clear();
+        	}
+        }
         
         /*JsonBase fromJson = gson.fromJson(message, JsonBase.class);
         
@@ -318,6 +378,24 @@ public class MyWebSocket {
         	
         }*/
         
+    }
+    
+    private List<ScoreInfo> getAllRankList(List<ScoreInfo> scoreInfos){
+    	Collections.sort(scoreInfos,new RssiComparator());
+    	for (int i = 0; i < scoreInfos.size(); i++) {
+    		scoreInfos.get(i).setRank(i+1);
+		}
+    	
+    	return scoreInfos;
+    }
+    
+    private class RssiComparator implements Comparator<ScoreInfo>{
+        @Override
+        public int compare(ScoreInfo o1, ScoreInfo o2) {
+        	 Integer i1 = o1.getAllscore();
+        	 Integer i2 = o2.getAllscore();
+            return i2.compareTo(i1);
+        }
     }
     
     private MyWebSocket getMyWebSocketByIntegerValue(Map<MyWebSocket, Integer> onlineUserKey,int value) {
